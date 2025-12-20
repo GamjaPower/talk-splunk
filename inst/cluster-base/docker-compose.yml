@@ -1,0 +1,122 @@
+version: "3.8"
+
+x-splunk-common: &splunk-common
+  image: ${SPLUNK_IMAGE:-splunk/splunk:latest}
+  networks:
+    - splunknet
+  environment: &common-env
+    SPLUNK_START_ARGS: --accept-license
+    SPLUNK_PASSWORD: ${SPLUNK_PASSWORD}
+    SPLUNK_GENERAL_TERMS: "--accept-sgt-current-at-splunk-com"
+    SPLUNK_IDXC_SECRET: mysecretkey123
+
+x-indexer: &indexer
+  <<: *splunk-common
+  depends_on:
+    - cm1
+  environment:
+    <<: *common-env
+    SPLUNK_ROLE: splunk_indexer
+    SPLUNK_CLUSTER_MASTER_URL: cm1
+    SPLUNK_INDEXER_URL: idx1,idx2,idx3
+
+networks:
+  splunknet:
+    driver: bridge
+    attachable: true
+
+services:
+  # 클러스터 매니저 (예전 명칭: Cluster Master)
+  cm1:
+    <<: *splunk-common
+    hostname: cm1
+    container_name: cm1
+    environment:
+      <<: *common-env
+      SPLUNK_ROLE: splunk_cluster_master
+    ports:
+      - "8001:8000"   # 웹 UI (선택)
+      - "8081:8089"   # 관리 포트 (선택)
+    volumes:
+      - ./cm1-data:/opt/splunk/var
+      - ./cm1-etc:/opt/splunk/etc
+  # 인덱서 1
+  idx1:
+    <<: *indexer
+    hostname: idx1
+    container_name: idx1
+    ports:
+      - "8002:8000"
+      - "8011:1514/udp"
+      - "8082:8089"
+    volumes:
+      - ./idx1-data:/opt/splunk/var
+      - ./idx1-etc:/opt/splunk/etc
+  # 인덱서 2
+  idx2:
+    <<: *indexer
+    hostname: idx2
+    container_name: idx2
+    ports:
+      - "8003:8000"
+      - "8012:1514"
+      - "8083:8089"
+    volumes:
+      - ./idx2-data:/opt/splunk/var
+      - ./idx2-etc:/opt/splunk/etc
+  # 인덱서 3
+  idx3:
+    <<: *indexer
+    hostname: idx3
+    container_name: idx3
+    ports:
+      - "8004:8000"
+      - "8013:1514"
+      - "8084:8089"
+    volumes:
+      - ./idx3-data:/opt/splunk/var
+      - ./idx3-etc:/opt/splunk/etc
+  # 검색 헤드 (Search Head) – 단일 노드, 클러스터 아님
+  sh1:
+    <<: *splunk-common
+    hostname: sh1
+    container_name: sh1
+    depends_on:
+      - idx1
+      - idx2
+      - idx3
+      - cm1
+    environment:
+      <<: *common-env
+      SPLUNK_ROLE: splunk_search_head
+      # 검색 헤드에서 붙을 인덱서 클러스터 구성
+      SPLUNK_INDEXER_URL: idx1,idx2,idx3
+      SPLUNK_CLUSTER_MASTER_URL: cm1
+    ports:
+      - "8000:8000"   # 메인 접속용 웹 포트
+      - "8089:8089"   # 관리 포트
+    volumes:
+      - ./sh1-data:/opt/splunk/var
+      - ./sh1-etc:/opt/splunk/etc
+  # Heavy Forwarder
+  hf1:
+    <<: *splunk-common
+    hostname: hf1
+    container_name: hf1
+    depends_on:
+      - idx1
+      - idx2
+      - idx3
+      - cm1
+    environment:
+      <<: *common-env
+      SPLUNK_ROLE: splunk_heavy_forwarder
+      # 포워딩 대상 인덱서 클러스터
+      SPLUNK_INDEXER_URL: idx1,idx2,idx3
+    ports:
+      - "8005:8000"
+      - "8090:8089"
+      - "9997:9997/tcp" # 기본 포워더 수신 포트
+    volumes:
+      - ./hf1-data:/opt/splunk/var
+      - ./hf1-etc:/opt/splunk/etc
