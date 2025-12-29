@@ -1,0 +1,333 @@
+version: "3.8"
+
+x-splunk-common: &splunk-common
+  image: ${SPLUNK_IMAGE:-splunk/splunk:latest}
+  networks:
+    - splunknet
+  environment: &common-env
+    SPLUNK_START_ARGS: --accept-license
+    SPLUNK_PASSWORD: ${SPLUNK_PASSWORD}
+    SPLUNK_GENERAL_TERMS: "--accept-sgt-current-at-splunk-com"
+    SPLUNK_IDXC_PASS4SYMMKEY: "7fQmP4ZxL9A2RkEwJYtHcD6N8bV5sMUp"
+
+x-indexer: &indexer
+  <<: *splunk-common
+  depends_on:
+    - cm1
+  environment:
+    <<: *common-env
+    SPLUNK_ROLE: splunk_indexer
+    SPLUNK_CLUSTER_MASTER_URL: cm1:8089
+    SPLUNK_INDEXER_URL: idx1,idx2,idx3
+    SPLUNK_LICENSE_MASTER_URL: cm1:8089
+    SPLUNK_SITE: site1
+
+x-shc-member: &shc-member
+  <<: *splunk-common
+  depends_on:
+    - idx1
+    - idx2
+    - idx3
+    - cm1
+    - dpl1
+  environment:
+    <<: *common-env
+    SPLUNK_INDEXER_URL: idx1,idx2,idx3,idx4,idx5,idx6
+    SPLUNK_CLUSTER_MASTER_URL: cm1:8089
+    SPLUNK_LICENSE_MASTER_URL: cm1:8089
+    SPLUNK_SEARCH_HEAD_URL: sh2,sh3
+    SPLUNK_SEARCH_HEAD_CAPTAIN_URL: sh1
+    SPLUNK_ROLE: splunk_search_head
+    SPLUNK_DEPLOYER_URL: dpl1
+    SPLUNK_SHC_PASS4SYMMKEY: "3nXyR8vTzW4qJcFhKpLsGdE2aYbUoN7m"
+    SPLUNK_SITE: site1
+
+x-shc-captain: &shc-captain
+  <<: *shc-member
+  environment:
+    <<: *common-env
+    SPLUNK_INDEXER_URL: idx1,idx2,idx3
+    SPLUNK_CLUSTER_MASTER_URL: cm1:8089
+    SPLUNK_LICENSE_MASTER_URL: cm1:8089
+    SPLUNK_SEARCH_HEAD_URL: sh2,sh3
+    SPLUNK_SEARCH_HEAD_CAPTAIN_URL: sh1
+    SPLUNK_ROLE: splunk_search_head_captain
+    SPLUNK_DEPLOYER_URL: dpl1
+    SPLUNK_SHC_PASS4SYMMKEY: "3nXyR8vTzW4qJcFhKpLsGdE2aYbUoN7m"
+    SPLUNK_SITE: site1
+
+# site2 클러스터용 재사용 설정
+x-indexer-site2: &indexer-site2
+  <<: *splunk-common
+  depends_on:
+    - cm1
+  environment:
+    <<: *common-env
+    SPLUNK_ROLE: splunk_indexer
+    SPLUNK_CLUSTER_MASTER_URL: cm1:8089
+    SPLUNK_INDEXER_URL: idx4,idx5,idx6
+    SPLUNK_LICENSE_MASTER_URL: cm1:8089
+    SPLUNK_SITE: site2
+
+x-shc-member-site2: &shc-member-site2
+  <<: *splunk-common
+  depends_on:
+    - idx4
+    - idx5
+    - idx6
+    - cm1
+    - dpl1
+  environment:
+    <<: *common-env
+    SPLUNK_INDEXER_URL: idx1,idx2,idx3,idx4,idx5,idx6
+    SPLUNK_CLUSTER_MASTER_URL: cm1:8089
+    SPLUNK_LICENSE_MASTER_URL: cm1:8089
+    SPLUNK_SEARCH_HEAD_URL: sh5,sh6
+    SPLUNK_SEARCH_HEAD_CAPTAIN_URL: sh4
+    SPLUNK_ROLE: splunk_search_head
+    SPLUNK_DEPLOYER_URL: dpl1
+    SPLUNK_SHC_PASS4SYMMKEY: "3nXyR8vTzW4qJcFhKpLsGdE2aYbUoN7m"
+    SPLUNK_SITE: site2
+
+x-shc-captain-site2: &shc-captain-site2
+  <<: *shc-member-site2
+  environment:
+    <<: *common-env
+    SPLUNK_INDEXER_URL: idx4,idx5,idx6
+    SPLUNK_CLUSTER_MASTER_URL: cm1:8089
+    SPLUNK_LICENSE_MASTER_URL: cm1:8089
+    SPLUNK_SEARCH_HEAD_URL: sh5,sh6
+    SPLUNK_SEARCH_HEAD_CAPTAIN_URL: sh4
+    SPLUNK_ROLE: splunk_search_head_captain
+    SPLUNK_DEPLOYER_URL: dpl1
+    SPLUNK_SHC_PASS4SYMMKEY: "3nXyR8vTzW4qJcFhKpLsGdE2aYbUoN7m"
+    SPLUNK_SITE: site2
+
+networks:
+  splunknet:
+    driver: bridge
+    attachable: true
+
+services:
+# --------- site1 클러스터 ---------
+  cm1:
+    <<: *splunk-common
+    hostname: cm1
+    container_name: cm1
+    environment:
+      <<: *common-env
+      SPLUNK_ROLE: splunk_cluster_master
+      SPLUNK_ALL_SITES: site1,site2
+      SPLUNK_MULTISITE_REPLICATION_FACTOR_ORIGIN: "2"
+      SPLUNK_MULTISITE_REPLICATION_FACTOR_TOTAL:  "3"
+      SPLUNK_MULTISITE_SEARCH_FACTOR_ORIGIN: "2"
+      SPLUNK_MULTISITE_SEARCH_FACTOR_TOTAL:  "3"
+      SPLUNK_CLUSTER_LABEL: multisite-demo
+      SPLUNK_MULTISITE_MASTER: cm1
+      SPLUNK_MULTISITE_MASTER_PORT: 8089
+      # 라이선스 파일을 마운트한 뒤 경로를 지정하면 라이선스 마스터 역할 수행
+      SPLUNK_LICENSE_URI: /etc/Splunk.License
+    ports:
+      - "8001:8000"   # 웹 UI (선택)
+      - "8081:8089"   # 관리 포트 (선택)
+    volumes:
+      - ./cm1-data:/opt/splunk/var
+      - ./cm1-etc:/opt/splunk/etc
+      - /usr/local/pkgs/Splunk.License:/etc/Splunk.License
+  # SH Deployer
+  dpl1:
+    <<: *splunk-common
+    hostname: dpl1
+    container_name: dpl1
+    environment:
+      <<: *common-env
+      SPLUNK_ROLE: splunk_deployer
+      SPLUNK_SITE: site1
+      SPLUNK_INDEXER_URL: idx1,idx2,idx3,idx4,idx5,idx6
+      SPLUNK_SEARCH_HEAD_URL: sh2,sh3
+      SPLUNK_SEARCH_HEAD_CAPTAIN_URL: sh1
+      SPLUNK_DEPLOYER_URL: dpl1
+      SPLUNK_CLUSTER_MASTER_URL: cm1:8089
+      SPLUNK_SHC_PASS4SYMMKEY: "3nXyR8vTzW4qJcFhKpLsGdE2aYbUoN7m"      
+    ports:
+      - "8008:8000"   # 관리 포트 (선택)
+      - "8088:8089"   # 관리 포트 (선택)
+    volumes:
+      - ./dpl1-etc:/opt/splunk/etc
+  # 인덱서 1
+  idx1:
+    <<: *indexer
+    hostname: idx1
+    container_name: idx1
+    ports:
+      - "8002:8000"
+      - "8011:1514/udp"
+      - "8082:8089"
+    volumes:
+      - ./idx1-data:/opt/splunk/var
+      - ./idx1-etc:/opt/splunk/etc
+  # 인덱서 2
+  idx2:
+    <<: *indexer
+    hostname: idx2
+    container_name: idx2
+    ports:
+      - "8003:8000"
+      - "8012:1514"
+      - "8083:8089"
+    volumes:
+      - ./idx2-data:/opt/splunk/var
+      - ./idx2-etc:/opt/splunk/etc
+  # 인덱서 3
+  idx3:
+    <<: *indexer
+    hostname: idx3
+    container_name: idx3
+    ports:
+      - "8004:8000"
+      - "8013:1514"
+      - "8084:8089"
+    volumes:
+      - ./idx3-data:/opt/splunk/var
+      - ./idx3-etc:/opt/splunk/etc
+  # 검색 헤드 클러스터 (3노드)
+  sh1:
+    <<: *shc-captain
+    hostname: sh1
+    container_name: sh1
+    ports:
+      - "8000:8000"   # 메인 접속용 웹 포트
+      - "8085:8089"   # 관리 포트
+    volumes:
+      - ./sh1-data:/opt/splunk/var
+      - ./sh1-etc:/opt/splunk/etc
+  sh2:
+    <<: *shc-member
+    hostname: sh2
+    container_name: sh2
+    ports:
+      - "8006:8000"   # 메인 접속용 웹 포트
+      - "8086:8089"   # 관리 포트
+    volumes:
+      - ./sh2-data:/opt/splunk/var
+      - ./sh2-etc:/opt/splunk/etc     
+  sh3:
+    <<: *shc-member
+    hostname: sh3
+    container_name: sh3
+    ports:
+      - "8007:8000"   # 메인 접속용 웹 포트
+      - "8087:8089"   # 관리 포트
+    volumes:
+      - ./sh3-data:/opt/splunk/var
+      - ./sh3-etc:/opt/splunk/etc          
+  # Heavy Forwarder
+  hf1:
+    <<: *splunk-common
+    hostname: hf1
+    container_name: hf1
+    depends_on:
+      - idx1
+      - idx2
+      - idx3
+      - cm1
+    environment:
+      <<: *common-env
+      SPLUNK_ROLE: splunk_heavy_forwarder
+      # 포워딩 대상 인덱서 클러스터
+      SPLUNK_INDEXER_URL: idx1,idx2,idx3
+      SPLUNK_LICENSE_MASTER_URL: cm1:8089
+      SPLUNK_SITE: site1
+    ports:
+      - "8005:8000"
+      - "8090:8089"
+      - "9997:9997/tcp" # 기본 포워더 수신 포트
+    volumes:
+      - ./hf1-data:/opt/splunk/var
+      - ./hf1-etc:/opt/splunk/etc
+  # --------- site2 클러스터 ---------
+  idx4:
+    <<: *indexer-site2
+    hostname: idx4
+    container_name: idx4
+    ports:
+      - "8102:8000"
+      - "8111:1514/udp"
+      - "8182:8089"
+    volumes:
+      - ./idx4-data:/opt/splunk/var
+      - ./idx4-etc:/opt/splunk/etc
+  idx5:
+    <<: *indexer-site2
+    hostname: idx5
+    container_name: idx5
+    ports:
+      - "8103:8000"
+      - "8112:1514"
+      - "8183:8089"
+    volumes:
+      - ./idx5-data:/opt/splunk/var
+      - ./idx5-etc:/opt/splunk/etc
+  idx6:
+    <<: *indexer-site2
+    hostname: idx6
+    container_name: idx6
+    ports:
+      - "8104:8000"
+      - "8113:1514"
+      - "8184:8089"
+    volumes:
+      - ./idx6-data:/opt/splunk/var
+      - ./idx6-etc:/opt/splunk/etc
+  sh4:
+    <<: *shc-captain-site2
+    hostname: sh4
+    container_name: sh4
+    ports:
+      - "8100:8000"
+      - "8185:8089"
+    volumes:
+      - ./sh4-data:/opt/splunk/var
+      - ./sh4-etc:/opt/splunk/etc
+  sh5:
+    <<: *shc-member-site2
+    hostname: sh5
+    container_name: sh5
+    ports:
+      - "8106:8000"
+      - "8186:8089"
+    volumes:
+      - ./sh5-data:/opt/splunk/var
+      - ./sh5-etc:/opt/splunk/etc     
+  sh6:
+    <<: *shc-member-site2
+    hostname: sh6
+    container_name: sh6
+    ports:
+      - "8107:8000"
+      - "8187:8089"
+    volumes:
+      - ./sh6-data:/opt/splunk/var
+      - ./sh6-etc:/opt/splunk/etc
+  hf2:
+    <<: *splunk-common
+    hostname: hf2
+    container_name: hf2
+    depends_on:
+      - idx4
+      - idx5
+      - idx6
+      - cm1
+    environment:
+      <<: *common-env
+      SPLUNK_ROLE: splunk_heavy_forwarder
+      SPLUNK_INDEXER_URL: idx4,idx5,idx6
+      SPLUNK_LICENSE_MASTER_URL: cm1:8089
+      SPLUNK_SITE: site2
+    ports:
+      - "8105:8000"
+      - "8190:8089"
+      - "19997:9997/tcp"
+    volumes:
+      - ./hf2-data:/opt/splunk/var
+      - ./hf2-etc:/opt/splunk/etc

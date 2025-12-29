@@ -1,0 +1,38 @@
+version: "3.8"
+
+x-splunk-common: &splunk-common
+  image: ${SPLUNK_IMAGE:-splunk/splunk:latest}
+  networks:
+    - splunknet
+  environment: &common-env
+    SPLUNK_START_ARGS: --accept-license
+    SPLUNK_PASSWORD: ${SPLUNK_PASSWORD}
+    SPLUNK_GENERAL_TERMS: "--accept-sgt-current-at-splunk-com"
+
+x-standalone: &standalone
+  <<: *splunk-common
+  depends_on:
+    - cm1
+  environment:
+    <<: *common-env
+    SPLUNK_ROLE: splunk_standalone
+networks:
+  splunknet:
+    driver: bridge
+    attachable: true
+
+services:
+  standalone:
+    <<: *standalone
+    hostname: standalone
+    container_name: standalone
+    ports:
+      - "8000:8000"   # Web UI
+      - "8088:8088"   # HEC
+      - "8089:8089"   # Management
+      - "9997:9997"   # Splunk receiving port (forwarder용)
+      - "1514:1514/udp" # (선택) Syslog UDP      
+    volumes:
+      - ./data:/opt/splunk/var
+      - ./etc:/opt/splunk/etc
+  
