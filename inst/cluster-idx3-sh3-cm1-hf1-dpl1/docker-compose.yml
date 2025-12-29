@@ -185,21 +185,21 @@ services:
     volumes:
       - ./hf1-data:/opt/splunk/var
       - ./hf1-etc:/opt/splunk/etc
-  # for manual addition idx4
-  idx4:
-    <<: *splunk-common
-    hostname: idx4
-    container_name: idx4
-    depends_on:
-      - idx1
-      - idx2
-      - idx3
-      - cm1
-    environment:
-      <<: *common-env
-      SPLUNK_ROLE: splunk_monitor
-    ports:
-      - "8009:8000"
-    volumes:
-      - ./idx4-data:/opt/splunk/var
-      - ./idx4-etc:/opt/splunk/etc
+  # # for manual addition idx4
+  # idx4:
+  #   <<: *splunk-common
+  #   hostname: idx4
+  #   container_name: idx4
+  #   depends_on:
+  #     - idx1
+  #     - idx2
+  #     - idx3
+  #     - cm1
+  #   environment:
+  #     <<: *common-env
+  #     SPLUNK_ROLE: splunk_monitor
+  #   ports:
+  #     - "8009:8000"
+  #   volumes:
+  #     - ./idx4-data:/opt/splunk/var
+  #     - ./idx4-etc:/opt/splunk/etc
