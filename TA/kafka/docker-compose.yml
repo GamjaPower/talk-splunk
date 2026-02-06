@@ -1,0 +1,152 @@
+#version: '3.8'
+
+networks:
+  kafka-net:
+    driver: bridge
+
+services:
+  kafka1:
+    image: confluentinc/cp-kafka:7.8.0
+    hostname: kafka1
+    container_name: kafka1
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_BROKER_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:9093,2@kafka2:9093,3@kafka3:9093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka1:9092,CONTROLLER://kafka1:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka1:9092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      CLUSTER_ID: 'EmptNWtoR4GGWx-BH6nGLQ'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+    volumes:
+      - kafka1_data:/var/lib/kafka/data
+    networks:
+      - kafka-net
+
+  kafka2:
+    image: confluentinc/cp-kafka:7.8.0
+    hostname: kafka2
+    container_name: kafka2
+    ports:
+      - "9094:9092"
+      - "9095:9093"
+    environment:
+      KAFKA_NODE_ID: 2
+      KAFKA_BROKER_ID: 2
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:9093,2@kafka2:9093,3@kafka3:9093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka2:9092,CONTROLLER://kafka2:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka2:9092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      CLUSTER_ID: 'EmptNWtoR4GGWx-BH6nGLQ'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+    volumes:
+      - kafka2_data:/var/lib/kafka/data
+    networks:
+      - kafka-net
+
+  kafka3:
+    image: confluentinc/cp-kafka:7.8.0
+    hostname: kafka3
+    container_name: kafka3
+    ports:
+      - "9096:9092"
+      - "9097:9093"
+    environment:
+      KAFKA_NODE_ID: 3
+      KAFKA_BROKER_ID: 3
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:9093,2@kafka2:9093,3@kafka3:9093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka3:9092,CONTROLLER://kafka3:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka3:9092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      CLUSTER_ID: 'EmptNWtoR4GGWx-BH6nGLQ'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+    volumes:
+      - kafka3_data:/var/lib/kafka/data
+    networks:
+      - kafka-net
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-cluster-ui
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:9092,kafka2:9092,kafka3:9092
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+    networks:
+      - kafka-net
+  connect:
+    image: confluentinc/cp-kafka-connect:7.8.0
+    hostname: kafka-connect
+    container_name: kafka-connect
+    ports:
+      - "8083:8083"
+    environment:
+      CONNECT_REST_PORT: 8083
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+
+      # Kafka cluster bootstrap servers (브로커 주소)
+      CONNECT_BOOTSTRAP_SERVERS: "kafka1:9092,kafka2:9092,kafka3:9092"
+
+      # 필요한 internal topics 설정
+      CONNECT_GROUP_ID: "quickstart-connect"
+      CONNECT_CONFIG_STORAGE_TOPIC: "connect-config"
+      CONNECT_OFFSET_STORAGE_TOPIC: "connect-offsets"
+      CONNECT_STATUS_STORAGE_TOPIC: "connect-status"
+
+      # Replication factors
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 3
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 3
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 3
+
+      # Key/Value converters (기본 JSON)
+      #CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      #CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      #CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      #CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+
+      # Plugin path for connectors
+      CONNECT_PLUGIN_PATH: "/usr/share/java,/opt/kafka/plugins"
+
+    volumes:
+      - ./kafka_connect_plugins:/opt/kafka/plugins
+
+    networks:
+      - kafka-net
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+volumes:
+  kafka1_data:
+  kafka2_data:
+  kafka3_data:
